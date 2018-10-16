@@ -1,7 +1,7 @@
 /* 
- * Leaflet TimeDimension v1.1.0 - 2017-10-13 
+ * Leaflet TimeDimension v1.1.0 - 2018-07-16 
  * 
- * Copyright 2017 Biel Frontera (ICTS SOCIB) 
+ * Copyright 2018 Biel Frontera (ICTS SOCIB) 
  * datacenter@socib.es 
  * http://www.socib.es/ 
  * 
@@ -14,6 +14,26 @@
  * git://github.com/socib/Leaflet.TimeDimension.git 
  * 
  */
+
+(function (factory, window) {
+  if (typeof define === 'function' && define.amd) {
+    // define an AMD module that relies on leaflet
+    define(['leaflet', 'iso8601-js-period'], factory);
+  } else if (typeof exports === 'object') {
+    // define a Common JS module that relies on leaflet
+    module.exports = factory(require('leaflet'), require('iso8601-js-period'));
+  } else if (typeof window !== 'undefined' && window.L && typeof L !== 'undefined') {
+    // get the iso8601 from the expected to be global nezasa scope
+    var iso8601 = nezasa.iso8601;
+    // attach your plugin to the global L variable
+    window.L.TimeDimension = factory(L, iso8601);
+  }
+  }(function (L, iso8601) {
+    // make sure iso8601 module js period module is available under the nezasa scope
+    if (typeof nezasa === 'undefined') {
+      var nezasa = { iso8601: iso8601 };
+    }
+    // TimeDimension plugin implementation
 /*jshint indent: 4, browser:true*/
 /*global L*/
 /*
@@ -84,7 +104,7 @@ L.TimeDimension = (L.Layer || L.Class).extend({
         }
         this._loadingTimeIndex = newIndex;
         var newTime = this._availableTimes[newIndex];
-        console.log('INIT -- Current time: ' + new Date(newTime).toISOString());
+       // console.log('INIT -- Current time: ' + new Date(newTime).toISOString());
         if (this._checkSyncedLayersReady(this._availableTimes[this._loadingTimeIndex])) {
             this._newTimeIndexLoaded();
         } else {
@@ -94,7 +114,7 @@ L.TimeDimension = (L.Layer || L.Class).extend({
             // add timeout of 3 seconds if layers doesn't response
             setTimeout((function (index) {
                 if (index == this._loadingTimeIndex) {
-                    console.log('Change time for timeout');
+                    // console.log('Change time for timeout');
                     this._newTimeIndexLoaded();
                 }
             }).bind(this, newIndex), this._loadingTimeout);
@@ -107,25 +127,25 @@ L.TimeDimension = (L.Layer || L.Class).extend({
             return;
         }
         var time = this._availableTimes[this._loadingTimeIndex];
-        console.log('END -- Current time: ' + new Date(time).toISOString());
+        // console.log('END -- Current time: ' + new Date(time).toISOString());
         this._currentTimeIndex = this._loadingTimeIndex;
         this.fire('timeload', {
             time: time
         });
         this._loadingTimeIndex = -1;
     },
-    
+
     _checkSyncedLayersReady: function (time) {
         for (var i = 0, len = this._syncedLayers.length; i < len; i++) {
             if (this._syncedLayers[i].isReady) {
                 if (!this._syncedLayers[i].isReady(time)) {
-					return false;                    
+					return false;
                 }
             }
         }
         return true;
     },
-    
+
     setCurrentTime: function (time) {
         var newIndex = this._seekNearestTimeIndex(time);
         this.setCurrentTimeIndex(newIndex);
@@ -344,7 +364,7 @@ L.TimeDimension = (L.Layer || L.Class).extend({
             availableTimes: this._availableTimes,
             currentTime: currentTime
         });
-        console.log('available times changed');
+        // console.log('available times changed');
     },
     getLowerLimit: function () {
         return this._availableTimes[this.getLowerLimitIndex()];
@@ -587,6 +607,19 @@ L.TimeDimension.Util = {
             result = result.concat(b);
         }
         return result;
+    },
+
+    sort_and_deduplicate: function(arr) {
+        arr = arr.slice(0).sort();
+        var result = [];
+        var last = null;
+        for (var i = 0, l = arr.length; i < l; i++) {
+            if (arr[i] !== last){
+                result.push(arr[i]);
+                last = arr[i];
+            }
+        }
+        return result;
     }
 
 };
@@ -606,20 +639,23 @@ L.TimeDimension.Layer = (L.Layer || L.Class).extend({
         zIndex: 1
     },
 
-    initialize: function(layer, options) {
+    initialize: function (layer, options) {
         L.setOptions(this, options || {});
         this._map = null;
         this._baseLayer = layer;
         this._currentLayer = null;
         this._timeDimension = this.options.timeDimension || null;
+        this._first_datetime = this.options.first_datetime || null;
+        this._period = this.options.period || null;
+        this._keep_until_new=this.options.keep_until_new || false;
     },
 
-    addTo: function(map) {
+    addTo: function (map) {
         map.addLayer(this);
         return this;
     },
 
-    onAdd: function(map) {
+    onAdd: function (map) {
         this._map = map;
         if (!this._timeDimension && map.timeDimension) {
             this._timeDimension = map.timeDimension;
@@ -630,7 +666,7 @@ L.TimeDimension.Layer = (L.Layer || L.Class).extend({
         this._update();
     },
 
-    onRemove: function(map) {
+    onRemove: function (map) {
         this._timeDimension.unregisterSyncedLayer(this);
         this._timeDimension.off("timeloading", this._onNewTimeLoading, this);
         this._timeDimension.off("timeload", this._update, this);
@@ -638,12 +674,12 @@ L.TimeDimension.Layer = (L.Layer || L.Class).extend({
         this._map = null;
     },
 
-    eachLayer: function(method, context) {
+    eachLayer: function (method, context) {
         method.call(context, this._baseLayer);
         return this;
     },
 
-    setZIndex: function(zIndex) {
+    setZIndex: function (zIndex) {
         this.options.zIndex = zIndex;
         if (this._baseLayer.setZIndex) {
             this._baseLayer.setZIndex(zIndex);
@@ -654,7 +690,7 @@ L.TimeDimension.Layer = (L.Layer || L.Class).extend({
         return this;
     },
 
-    setOpacity: function(opacity) {
+    setOpacity: function (opacity) {
         this.options.opacity = opacity;
         if (this._baseLayer.setOpacity) {
             this._baseLayer.setOpacity(opacity);
@@ -665,7 +701,7 @@ L.TimeDimension.Layer = (L.Layer || L.Class).extend({
         return this;
     },
 
-    bringToBack: function() {
+    bringToBack: function () {
         if (!this._currentLayer) {
             return;
         }
@@ -673,7 +709,7 @@ L.TimeDimension.Layer = (L.Layer || L.Class).extend({
         return this;
     },
 
-    bringToFront: function() {
+    bringToFront: function () {
         if (!this._currentLayer) {
             return;
         }
@@ -681,7 +717,7 @@ L.TimeDimension.Layer = (L.Layer || L.Class).extend({
         return this;
     },
 
-    _onNewTimeLoading: function(ev) {
+    _onNewTimeLoading: function (ev) {
         // to be implemented for each type of layer
         this.fire('timeload', {
             time: ev.time
@@ -689,21 +725,36 @@ L.TimeDimension.Layer = (L.Layer || L.Class).extend({
         return;
     },
 
-    isReady: function(time) {
+    isReady: function (time) {
         // to be implemented for each type of layer
         return true;
     },
 
-    _update: function() {
+    _onPeriod: function (time) {
+        if (!this._period || !this._first_datetime) {
+            return true;
+        }
+        diff = moment.duration(moment(time).diff(moment(this._first_datetime))).asSeconds();
+        period = moment.duration(this._period).asSeconds();
+        remaining = diff % period
+        if (remaining === 0){
+            return true
+        }else{
+            return remaining
+        }
+
+    },
+
+    _update: function () {
         // to be implemented for each type of layer
         return true;
     },
 
-    getBaseLayer: function() {
+    getBaseLayer: function () {
         return this._baseLayer;
     },
 
-    getBounds: function() {
+    getBounds: function () {
         var bounds = new L.LatLngBounds();
         if (this._currentLayer) {
             bounds.extend(this._currentLayer.getBounds ? this._currentLayer.getBounds() : this._currentLayer.getLatLng());
@@ -713,27 +764,32 @@ L.TimeDimension.Layer = (L.Layer || L.Class).extend({
 
 });
 
-L.timeDimension.layer = function(layer, options) {
+L.timeDimension.layer = function (layer, options) {
     return new L.TimeDimension.Layer(layer, options);
 };
+
 /*
  * L.TimeDimension.Layer.WMS: wms Layer associated to a TimeDimension
  */
 
 L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
 
-    initialize: function(layer, options) {
+    initialize: function (layer, options) {
+
         L.TimeDimension.Layer.prototype.initialize.call(this, layer, options);
         this._timeCacheBackward = this.options.cacheBackward || this.options.cache || 0;
         this._timeCacheForward = this.options.cacheForward || this.options.cache || 0;
-        this._wmsVersion = this.options.wmsVersion || this.options.version || layer.options.version || "1.1.1";
+        this._wmsVersion =
+            this.options.wmsVersion || this.options.version || layer.options.version || "1.1.1";
         this._getCapabilitiesParams = this.options.getCapabilitiesParams || {};
         this._getCapabilitiesAlternateUrl = this.options.getCapabilitiesUrl || null;
         this._getCapabilitiesAlternateLayerName = this.options.getCapabilitiesLayerName || null;
         this._proxy = this.options.proxy || null;
         this._updateTimeDimension = this.options.updateTimeDimension || false;
         this._setDefaultTime = this.options.setDefaultTime || false;
-        this._updateTimeDimensionMode = this.options.updateTimeDimensionMode || 'intersect'; // 'union' or 'replace'
+        this._updateTimeDimensionMode = this.options.updateTimeDimensionMode || 'intersect'; // 'union'
+                                                                                             // or
+                                                                                             // 'replace'
         this._layers = {};
         this._defaultTime = 0;
         this._availableTimes = [];
@@ -741,8 +797,8 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         if (this._updateTimeDimension || this.options.requestTimeFromCapabilities) {
             this._requestTimeDimensionFromCapabilities();
         }
-
-        this._baseLayer.on('load', (function() {
+        this._datetime_format = this.options.datetime_format || null;
+        this._baseLayer.on('load', (function () {
             this._baseLayer.setLoaded(true);
             this.fire('timeload', {
                 time: this._defaultTime
@@ -750,7 +806,7 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         }).bind(this));
     },
 
-    getEvents: function() {
+    getEvents: function () {
         var clearCache = L.bind(this._unvalidateCache, this);
         return {
             moveend: clearCache,
@@ -758,7 +814,7 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         }
     },
 
-    eachLayer: function(method, context) {
+    eachLayer: function (method, context) {
         for (var prop in this._layers) {
             if (this._layers.hasOwnProperty(prop)) {
                 method.call(context, this._layers[prop]);
@@ -767,16 +823,30 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         return L.TimeDimension.Layer.prototype.eachLayer.call(this, method, context);
     },
 
-    _onNewTimeLoading: function(ev) {
-        // console.log('Layer._onNewTimeLoading: ' + this._baseLayer.wmsParams.layers + ' with time: ' + new Date(ev.time).toISOString());
-        var layer = this._getLayerForTime(ev.time);
+    _onNewTimeLoading: function (ev) {
+        time = ev.time;
+        if (this._onPeriod(ev.time) !== true) {
+            if (!this._keep_until_new) {
+                return;
+            }
+            time = moment(time - this._onPeriod(time) * 1000).valueOf();
+        }
+        // console.log('Layer._onNewTimeLoading: ' + this._baseLayer.wmsParams.layers + ' with
+        // time: ' + new Date(ev.time).toISOString());
+        var layer = this._getLayerForTime(time);
         if (!this._map.hasLayer(layer)) {
             this._map.addLayer(layer);
             // console.log('Layer._onNewTimeLoading: layer added to map');
         }
     },
 
-    isReady: function(time) {
+    isReady: function (time) {
+        if (this._onPeriod(time) !== true) {
+            if (!this._keep_until_new) {
+                return true;
+            }
+            time = moment(time - this._onPeriod(time) * 1000).valueOf();
+        }
         var layer = this._getLayerForTime(time);
         if (this.options.bounds && this._map)
             if (!this._map.getBounds().contains(this.options.bounds))
@@ -784,7 +854,7 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         return layer.isLoaded();
     },
 
-    onAdd: function(map) {
+    onAdd: function (map) {
         L.TimeDimension.Layer.prototype.onAdd.call(this, map);
         if (this._availableTimes.length == 0) {
             this._requestTimeDimensionFromCapabilities();
@@ -793,13 +863,25 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         }
     },
 
-    _update: function() {
+    _update: function () {
+
         if (!this._map)
             return;
         var time = this._timeDimension.getCurrentTime();
+        if (this._onPeriod(time) !== true) {
+            if (!this._keep_until_new) {
+                try {
+                    this._currentLayer.hide();
+                } catch (e) {
+                    return
+                }
+                return;
+            }
+            time = moment(time - this._onPeriod(time) * 1000).valueOf();
+        }
         // It will get the layer for this time (create or get)
-        // Then, the layer will be loaded if necessary, adding it to the map (and show it after loading).
-        // If it already on the map (but probably hidden), it will be shown
+        // Then, the layer will be loaded if necessary, adding it to the map (and show it after
+        // loading). If it already on the map (but probably hidden), it will be shown
         var layer = this._getLayerForTime(time);
         if (this._currentLayer == null) {
             this._currentLayer = layer;
@@ -811,7 +893,7 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         }
     },
 
-    setOpacity: function(opacity) {
+    setOpacity: function (opacity) {
         L.TimeDimension.Layer.prototype.setOpacity.apply(this, arguments);
         // apply to all preloaded caches
         for (var prop in this._layers) {
@@ -821,7 +903,7 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         }
     },
 
-    setZIndex: function(zIndex){
+    setZIndex: function (zIndex) {
         L.TimeDimension.Layer.prototype.setZIndex.apply(this, arguments);
         // apply to all preloaded caches
         for (var prop in this._layers) {
@@ -831,7 +913,7 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         }
     },
 
-    setParams: function(params, noRedraw) {
+    setParams: function (params, noRedraw) {
         L.extend(this._baseLayer.options, params);
         if (this._baseLayer.setParams) {
             this._baseLayer.setParams(params, noRedraw);
@@ -845,7 +927,7 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         return this;
     },
 
-    _unvalidateCache: function() {
+    _unvalidateCache: function () {
         var time = this._timeDimension.getCurrentTime();
         for (var prop in this._layers) {
             if (time != prop && this._layers.hasOwnProperty(prop)) {
@@ -855,7 +937,7 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         }
     },
 
-    _evictCachedTimes: function(keepforward, keepbackward) {
+    _evictCachedTimes: function (keepforward, keepbackward) {
         // Cache management
         var times = this._getLoadedTimes();
         var strTime = String(this._currentTime);
@@ -878,7 +960,7 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
             }
         }
     },
-    _showLayer: function(layer, time) {
+    _showLayer: function (layer, time) {
         if (this._currentLayer && this._currentLayer !== layer) {
             this._currentLayer.hide();
         }
@@ -888,12 +970,12 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         }
         this._currentLayer = layer;
         this._currentTime = time;
-        console.log('Show layer ' + layer.wmsParams.layers + ' with time: ' + new Date(time).toISOString());
+        // console.log('Show layer ' + layer.wmsParams.layers + ' with time: ' + new Date(time).toISOString());
 
         this._evictCachedTimes(this._timeCacheForward, this._timeCacheBackward);
     },
 
-    _getLayerForTime: function(time) {
+    _getLayerForTime: function (time) {
         if (time == 0 || time == this._defaultTime || time == null) {
             return this._baseLayer;
         }
@@ -909,7 +991,7 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
 
         this._layers[time] = newLayer;
 
-        newLayer.on('load', (function(layer, time) {
+        newLayer.on('load', (function (layer, time) {
             layer.setLoaded(true);
             // this time entry should exists inside _layers
             // but it might be deleted by cache management
@@ -919,40 +1001,49 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
             if (this._timeDimension && time == this._timeDimension.getCurrentTime() && !this._timeDimension.isLoading()) {
                 this._showLayer(layer, time);
             }
-            // console.log('Loaded layer ' + layer.wmsParams.layers + ' with time: ' + new Date(time).toISOString());
+            // console.log('Loaded layer ' + layer.wmsParams.layers + ' with time: ' + new
+            // Date(time).toISOString());
             this.fire('timeload', {
                 time: time
             });
         }).bind(this, newLayer, time));
+        newLayer.on('error', (function (layer, time) {
+            console.error('Error Loading:'+moment(time).utc().toISOString()+'@'+layer._url);
+             layer.setLoaded(true);
 
+        }).bind(this, newLayer, time));
         // Hack to hide the layer when added to the map.
         // It will be shown when timeload event is fired from the map (after all layers are loaded)
-        newLayer.onAdd = (function(map) {
+        newLayer.onAdd = (function (map) {
             Object.getPrototypeOf(this).onAdd.call(this, map);
             this.hide();
         }).bind(newLayer);
         return newLayer;
     },
 
-    _createLayerForTime:function(time){
+    _createLayerForTime: function (time) {
         var wmsParams = this._baseLayer.options;
-        wmsParams.time = new Date(time).toISOString();
+        if (this._datetime_format == null) {
+            wmsParams.time = new Date(time).toISOString();
+        } else {
+            wmsParams.time = this._datetime_format(new Date(time).toISOString());
+        }
         return new this._baseLayer.constructor(this._baseLayer.getURL(), wmsParams);
     },
 
-    _getLoadedTimes: function() {
+    _getLoadedTimes: function () {
         var result = [];
         for (var prop in this._layers) {
             if (this._layers.hasOwnProperty(prop)) {
                 result.push(prop);
             }
         }
-        return result.sort(function(a, b) {
+        return result.sort(function (a, b) {
             return a - b;
         });
     },
 
-    _removeLayers: function(times) {
+    _removeLayers: function (times) {
         for (var i = 0, l = times.length; i < l; i++) {
             if (this._map)
                 this._map.removeLayer(this._layers[times[i]]);
@@ -960,13 +1051,13 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         }
     },
 
-    setMinimumForwardCache: function(value) {
+    setMinimumForwardCache: function (value) {
         if (value > this._timeCacheForward) {
             this._timeCacheForward = value;
         }
     },
 
-    _requestTimeDimensionFromCapabilities: function() {
+    _requestTimeDimensionFromCapabilities: function () {
         if (this._capabilitiesRequested) {
             return;
         }
@@ -976,10 +1067,11 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
             url = this._proxy + '?url=' + encodeURIComponent(url);
         }
         var oReq = new XMLHttpRequest();
-        oReq.addEventListener("load", (function(xhr) {
+        oReq.addEventListener("load", (function (xhr) {
             var data = xhr.currentTarget.responseXML;
             this._defaultTime = Date.parse(this._getDefaultTimeFromCapabilities(data));
-            this._setDefaultTime = this._setDefaultTime || (this._timeDimension && this._timeDimension.getAvailableTimes().length == 0);
+            this._setDefaultTime =
+                this._setDefaultTime || (this._timeDimension && this._timeDimension.getAvailableTimes().length == 0);
             this.setAvailableTimes(this._parseTimeDimensionFromCapabilities(data));
             if (this._setDefaultTime && this._timeDimension) {
                 this._timeDimension.setCurrentTime(this._defaultTime);
@@ -990,26 +1082,26 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         oReq.send();
     },
 
-    _getCapabilitiesUrl: function() {
+    _getCapabilitiesUrl: function () {
         var url = this._baseLayer.getURL();
         if (this._getCapabilitiesAlternateUrl)
             url = this._getCapabilitiesAlternateUrl;
         var params = L.extend({}, this._getCapabilitiesParams, {
-          'request': 'GetCapabilities',
-          'service': 'WMS',
-          'version': this._wmsVersion
+            'request': 'GetCapabilities',
+            'service': 'WMS',
+            'version': this._wmsVersion
         });
         url = url + L.Util.getParamString(params, url, params.uppercase);
         return url;
     },
 
-    _parseTimeDimensionFromCapabilities: function(xml) {
+    _parseTimeDimensionFromCapabilities: function (xml) {
         var layers = xml.querySelectorAll('Layer[queryable="1"]');
         var layerName = this._baseLayer.wmsParams.layers;
         var layer = null;
         var times = null;
 
-        layers.forEach(function(current) {
+        layers.forEach(function (current) {
             if (current.querySelector("Name").innerHTML === layerName) {
                 layer = current;
             }
@@ -1024,7 +1116,7 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         return times;
     },
 
-    _getTimesFromLayerCapabilities: function(layer) {
+    _getTimesFromLayerCapabilities: function (layer) {
         var times = null;
         var dimensions = layer.querySelectorAll("Dimension[name='time']");
         if (dimensions && dimensions.length && dimensions[0].textContent.length) {
@@ -1038,13 +1130,13 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         return times;
     },
 
-    _getDefaultTimeFromCapabilities: function(xml) {
+    _getDefaultTimeFromCapabilities: function (xml) {
         var layers = xml.querySelectorAll('Layer[queryable="1"]');
         var layerName = this._baseLayer.wmsParams.layers;
         var layer = null;
         var times = null;
 
-        layers.forEach(function(current) {
+        layers.forEach(function (current) {
             if (current.querySelector("Name").innerHTML === layerName) {
                 layer = current;
             }
@@ -1060,7 +1152,7 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         return defaultTime;
     },
 
-    _getDefaultTimeFromLayerCapabilities: function(layer) {
+    _getDefaultTimeFromLayerCapabilities: function (layer) {
         var defaultTime = 0;
         var dimensions = layer.querySelectorAll("Dimension[name='time']");
         if (dimensions && dimensions.length && dimensions[0].attributes.default) {
@@ -1074,22 +1166,23 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         return defaultTime;
     },
 
-    setAvailableTimes: function(times) {
+    setAvailableTimes: function (times) {
         this._availableTimes = L.TimeDimension.Util.parseTimesExpression(times);
         this._updateTimeDimensionAvailableTimes();
     },
 
-    _updateTimeDimensionAvailableTimes: function() {
+    _updateTimeDimensionAvailableTimes: function () {
         if ((this._timeDimension && this._updateTimeDimension) ||
             (this._timeDimension && this._timeDimension.getAvailableTimes().length == 0)) {
-            this._timeDimension.setAvailableTimes(this._availableTimes, this._updateTimeDimensionMode);
+            this._timeDimension.setAvailableTimes(this._availableTimes,
+                this._updateTimeDimensionMode);
             if (this._setDefaultTime && this._defaultTime > 0) {
                 this._timeDimension.setCurrentTime(this._defaultTime);
             }
         }
     },
 
-    _getNearestTime: function(time) {
+    _getNearestTime: function (time) {
         if (this._layers.hasOwnProperty(time)) {
             return time;
         }
@@ -1107,10 +1200,10 @@ L.TimeDimension.Layer.WMS = L.TimeDimension.Layer.extend({
         if (index > 0) {
             index--;
         }
-        if (time != this._availableTimes[index]) {
-            console.log('Search layer time: ' + new Date(time).toISOString());
-            console.log('Return layer time: ' + new Date(this._availableTimes[index]).toISOString());
-        }
+        // if (time != this._availableTimes[index]) {
+        //     console.log('Search layer time: ' + new Date(time).toISOString());
+        //     console.log('Return layer time: ' + new Date(this._availableTimes[index]).toISOString());
+        // }
         return this._availableTimes[index];
     },
 
@@ -1127,37 +1220,37 @@ L.NonTiledLayer.include({
     _originalUpdate: L.NonTiledLayer.prototype._update,
     _originalOnRemove: L.NonTiledLayer.prototype.onRemove,
 
-    _update: function() {
+    _update: function () {
         if (!this._visible && this._loaded) {
             return;
         }
         this._originalUpdate();
     },
 
-    onRemove: function(map) {
+    onRemove: function (map) {
         this._loaded = false;
         this._originalOnRemove(map);
     },
 
-    setLoaded: function(loaded) {
+    setLoaded: function (loaded) {
         this._loaded = loaded;
     },
 
-    isLoaded: function() {
+    isLoaded: function () {
         return this._loaded;
     },
 
-    hide: function() {
+    hide: function () {
         this._visible = false;
         this._div.style.display = 'none';
     },
 
-    show: function() {
+    show: function () {
         this._visible = true;
         this._div.style.display = 'block';
     },
 
-    getURL: function() {
+    getURL: function () {
         return this._wmsUrl;
     }
 
@@ -1169,42 +1262,42 @@ L.TileLayer.include({
 
     _originalUpdate: L.TileLayer.prototype._update,
 
-    _update: function() {
+    _update: function () {
         if (!this._visible && this._loaded) {
             return;
         }
         this._originalUpdate();
     },
 
-    setLoaded: function(loaded) {
+    setLoaded: function (loaded) {
         this._loaded = loaded;
     },
 
-    isLoaded: function() {
+    isLoaded: function () {
         return this._loaded;
     },
 
-    hide: function() {
+    hide: function () {
         this._visible = false;
         if (this._container) {
             this._container.style.display = 'none';
         }
     },
 
-    show: function() {
+    show: function () {
         this._visible = true;
         if (this._container) {
             this._container.style.display = 'block';
         }
     },
 
-    getURL: function() {
+    getURL: function () {
         return this._url;
     }
 
 });
 
-L.timeDimension.layer.wms = function(layer, options) {
+L.timeDimension.layer.wms = function (layer, options) {
     return new L.TimeDimension.Layer.WMS(layer, options);
 };
 
@@ -1312,68 +1405,62 @@ L.TimeDimension.Layer.GeoJson = L.TimeDimension.Layer.extend({
 
     _setAvailableTimes: function() {
         var times = [];
-        this._availableTimes = [];
         var layers = this._baseLayer.getLayers();
         for (var i = 0, l = layers.length; i < l; i++) {
             if (layers[i].feature) {
-                times = L.TimeDimension.Util.union_arrays(
-                    times,
-                    this._getFeatureTimes(layers[i].feature)
-                );
+                var featureTimes = this._getFeatureTimes(layers[i].feature);
+                for (var j = 0, m = featureTimes.length; j < m; j++) {
+                    times.push(featureTimes[j]);
+                }
             }
         }
-        // String dates to ms
-        for (var i = 0, l = times.length; i < l; i++) {
-            var time = times[i]
-            if (typeof time == 'string' || time instanceof String) {
-                time = Date.parse(time.trim());
-            }
-            this._availableTimes.push(time);
-        }
+        this._availableTimes = L.TimeDimension.Util.sort_and_deduplicate(times);
         if (this._timeDimension && (this._updateTimeDimension || this._timeDimension.getAvailableTimes().length == 0)) {
             this._timeDimension.setAvailableTimes(this._availableTimes, this._updateTimeDimensionMode);
         }
     },
 
     _getFeatureTimes: function(feature) {
-        if (!feature.properties) {
-            return [];
+        if (!feature.featureTimes) {
+            if (!feature.properties) {
+                feature.featureTimes = [];
+            } else if (feature.properties.hasOwnProperty('coordTimes')) {
+                feature.featureTimes = feature.properties.coordTimes;
+            } else if (feature.properties.hasOwnProperty('times')) {
+                feature.featureTimes = feature.properties.times;
+            } else if (feature.properties.hasOwnProperty('linestringTimestamps')) {
+                feature.featureTimes = feature.properties.linestringTimestamps;
+            } else if (feature.properties.hasOwnProperty('time')) {
+                feature.featureTimes = [feature.properties.time];
+            } else {
+                feature.featureTimes = [];
+            }
+            // String dates to ms
+            for (var i = 0, l = feature.featureTimes.length; i < l; i++) {
+                var time = feature.featureTimes[i];
+                if (typeof time == 'string' || time instanceof String) {
+                    time = Date.parse(time.trim());
+                    feature.featureTimes[i] = time;
+                }
+            }
         }
-        if (feature.properties.hasOwnProperty('coordTimes')) {
-            return feature.properties.coordTimes;
-        }
-        if (feature.properties.hasOwnProperty('times')) {
-            return feature.properties.times;
-        }
-        if (feature.properties.hasOwnProperty('linestringTimestamps')) {
-            return feature.properties.linestringTimestamps;
-        }
-        if (feature.properties.hasOwnProperty('time')) {
-            return [feature.properties.time];
-        }
-        return [];
+        return feature.featureTimes;
     },
 
     _getFeatureBetweenDates: function(feature, minTime, maxTime) {
-        var featureStringTimes = this._getFeatureTimes(feature);
-        if (featureStringTimes.length == 0) {
+        var featureTimes = this._getFeatureTimes(feature);
+        if (featureTimes.length == 0) {
             return feature;
         }
-        var featureTimes = [];
-        for (var i = 0, l = featureStringTimes.length; i < l; i++) {
-            var time = featureStringTimes[i]
-            if (typeof time == 'string' || time instanceof String) {
-                time = Date.parse(time.trim());
-            }
-            featureTimes.push(time);
-        }
+
+        var index_min = null,
+            index_max = null,
+            l = featureTimes.length;
 
         if (featureTimes[0] > maxTime || featureTimes[l - 1] < minTime) {
             return null;
         }
-        var index_min = null,
-            index_max = null,
-            l = featureTimes.length;
+
         if (featureTimes[l - 1] > minTime) {
             for (var i = 0; i < l; i++) {
                 if (index_min === null && featureTimes[i] > minTime) {
@@ -1419,6 +1506,220 @@ L.TimeDimension.Layer.GeoJson = L.TimeDimension.Layer.extend({
 L.timeDimension.layer.geoJson = function(layer, options) {
     return new L.TimeDimension.Layer.GeoJson(layer, options);
 };
+
+/*
+ * L.TimeDimension.Layer.ImageOverlay:
+ */
+
+
+L.TimeDimension.Layer.ImageOverlay = L.TimeDimension.Layer.extend({
+
+    initialize: function (layer, options) {
+        L.TimeDimension.Layer.prototype.initialize.call(this, layer, options);
+        this._layers = {};
+        this._defaultTime = 0;
+        this._timeCacheBackward = this.options.cacheBackward || this.options.cache || 0;
+        this._timeCacheForward = this.options.cacheForward || this.options.cache || 0;
+        this._getUrlFunction = this.options.getUrlFunction;
+
+        this._baseLayer.on('load', (function () {
+            this._baseLayer.setLoaded(true);
+            this.fire('timeload', {
+                time: this._defaultTime
+            });
+        }).bind(this));
+    },
+
+    eachLayer: function (method, context) {
+        for (var prop in this._layers) {
+            if (this._layers.hasOwnProperty(prop)) {
+                method.call(context, this._layers[prop]);
+            }
+        }
+        return L.TimeDimension.Layer.prototype.eachLayer.call(this, method, context);
+    },
+
+    _onNewTimeLoading: function (ev) {
+        time = ev.time;
+        if (this._onPeriod(ev.time) !== true) {
+            if (!this._keep_until_new) {
+                return;
+            }
+            time = moment(time - this._onPeriod(time) * 1000).valueOf();
+        }
+        var layer = this._getLayerForTime(time);
+        if (!this._map.hasLayer(layer)) {
+            this._map.addLayer(layer);
+        }
+    },
+
+    isReady: function (time) {
+        if (this._onPeriod(time) !== true) {
+            if (!this._keep_until_new) {
+                return true;
+            }
+            time = moment(time - this._onPeriod(time) * 1000).valueOf();
+        }
+        var layer = this._getLayerForTime(time);
+        return layer.isLoaded();
+    },
+
+    _update: function () {
+        if (!this._map)
+            return;
+        var time = this._map.timeDimension.getCurrentTime();
+        if (this._onPeriod(time) !== true) {
+            if (!this._keep_until_new) {
+                try {
+                    this._currentLayer.hide();
+                } catch (e) {
+                    return
+                }
+                return;
+            }
+
+            time = moment(time - this._onPeriod(time) * 1000).valueOf();
+        }
+        var layer = this._getLayerForTime(time);
+        if (this._currentLayer == null) {
+            this._currentLayer = layer;
+        }
+        if (!this._map.hasLayer(layer)) {
+            this._map.addLayer(layer);
+        } else {
+            this._showLayer(layer, time);
+        }
+    },
+
+    _showLayer: function (layer, time) {
+        if (this._currentLayer && this._currentLayer !== layer) {
+            this._currentLayer.hide();
+            this._map.removeLayer(this._currentLayer);
+        }
+        layer.show();
+        if (this._currentLayer && this._currentLayer === layer) {
+            return;
+        }
+        this._currentLayer = layer;
+        // Cache management
+        var times = this._getLoadedTimes();
+        var strTime = String(time);
+        var index = times.indexOf(strTime);
+        var remove = [];
+        // remove times before current time
+        if (this._timeCacheBackward > -1) {
+            var objectsToRemove = index - this._timeCacheBackward;
+            if (objectsToRemove > 0) {
+                remove = times.splice(0, objectsToRemove);
+                this._removeLayers(remove);
+            }
+        }
+        if (this._timeCacheForward > -1) {
+            index = times.indexOf(strTime);
+            var objectsToRemove = times.length - index - this._timeCacheForward - 1;
+            if (objectsToRemove > 0) {
+                remove = times.splice(index + this._timeCacheForward + 1, objectsToRemove);
+                this._removeLayers(remove);
+            }
+        }
+    },
+
+    _getLayerForTime: function (time) {
+        if (time == 0 || time == this._defaultTime) {
+            return this._baseLayer;
+        }
+        if (this._layers.hasOwnProperty(time)) {
+            return this._layers[time];
+        }
+        var url = this._getUrlFunction(this._baseLayer.getURL(), time);
+        imageBounds = this._baseLayer._bounds;
+
+        var newLayer = L.imageOverlay(url, imageBounds, this._baseLayer.options);
+        this._layers[time] = newLayer;
+        newLayer.on('load', (function (layer, time) {
+            layer.setLoaded(true);
+            if (this._map.timeDimension && time == this._map.timeDimension.getCurrentTime() && !this._map.timeDimension.isLoading()) {
+                this._showLayer(layer, time);
+            }
+            this.fire('timeload', {
+                time: time
+            });
+        }).bind(this, newLayer, time));
+        newLayer.on('error', (function (layer, time) {
+            console.error('Error Loading:'+moment(time).utc().toISOString()+'@'+layer._url);
+             layer.setLoaded(true);
+
+        }).bind(this, newLayer, time));
+        // Hack to hide the layer when added to the map.
+        // It will be shown when timeload event is fired from the map (after all layers are loaded)
+        newLayer.onAdd = (function (map) {
+            Object.getPrototypeOf(this).onAdd.call(this, map);
+            this.hide();
+        }).bind(newLayer);
+        return newLayer;
+    },
+
+    _getLoadedTimes: function () {
+        var result = [];
+        for (var prop in this._layers) {
+            if (this._layers.hasOwnProperty(prop)) {
+                result.push(prop);
+            }
+        }
+        return result.sort();
+    },
+
+    _removeLayers: function (times) {
+        for (var i = 0, l = times.length; i < l; i++) {
+            this._map.removeLayer(this._layers[times[i]]);
+            delete this._layers[times[i]];
+        }
+    },
+
+});
+
+L.timeDimension.layer.imageOverlay = function (layer, options) {
+    return new L.TimeDimension.Layer.ImageOverlay(layer, options);
+};
+
+L.ImageOverlay.include({
+    _visible: true,
+    _loaded: false,
+
+    _originalUpdate: L.imageOverlay.prototype._update,
+
+    _update: function () {
+        if (!this._visible && this._loaded) {
+            return;
+        }
+        this._originalUpdate();
+    },
+
+    setLoaded: function (loaded) {
+        this._loaded = loaded;
+    },
+
+    isLoaded: function () {
+        return this._loaded;
+    },
+
+    hide: function () {
+        this._visible = false;
+        if (this._image && this._image.style)
+            this._image.style.display = 'none';
+    },
+
+    show: function () {
+        this._visible = true;
+        if (this._image && this._image.style)
+            this._image.style.display = 'block';
+    },
+
+    getURL: function () {
+        return this._url;
+    },
+
+});
 
 /*jshint indent: 4, browser:true*/
 /*global L*/
@@ -1727,12 +2028,13 @@ L.Control.TimeDimension = L.Control.extend({
         autoPlay: false,
         playerOptions: {
             transitionTime: 1000
-        }
+        },
+        timeZones: ['UTC', 'Local']
     },
 
     initialize: function(options) {
         L.Control.prototype.initialize.call(this, options);
-        this._dateUTC = true;
+        this._timeZoneIndex = 0;
         this._timeDimension = this.options.timeDimension || null;
     },
 
@@ -2145,7 +2447,7 @@ L.Control.TimeDimension = L.Control.extend({
     },
 
     _buttonDateClicked: function(){
-        this._toggleDateUTC();
+        this._switchTimeZone();
     },
 
     _sliderTimeValueChanged: function(newValue) {
@@ -2161,20 +2463,37 @@ L.Control.TimeDimension = L.Control.extend({
         this._player.setTransitionTime(1000 / newValue);
     },
 
-    _toggleDateUTC: function() {
-        if (this._dateUTC) {
+    _getCurrentTimeZone: function() {
+        return this.options.timeZones[this._timeZoneIndex];
+    },
+
+    _switchTimeZone: function() {
+        if (this._getCurrentTimeZone().toLowerCase() == 'utc') {
             L.DomUtil.removeClass(this._displayDate, 'utc');
-            this._displayDate.title = 'Local Time';
-        } else {
+        }
+        this._timeZoneIndex = (this._timeZoneIndex + 1) % this.options.timeZones.length;
+        var timeZone = this._getCurrentTimeZone();
+        if (timeZone.toLowerCase() == 'utc') {
             L.DomUtil.addClass(this._displayDate, 'utc');
             this._displayDate.title = 'UTC Time';
+        } else if (timeZone.toLowerCase() == 'local') {
+            this._displayDate.title = 'Local Time';
+        } else {
+            this._displayDate.title = timeZone;
         }
-        this._dateUTC = !this._dateUTC;
+
         this._update();
     },
 
     _getDisplayDateFormat: function(date) {
-        return this._dateUTC ? date.toISOString() : date.toLocaleString();
+        var timeZone = this._getCurrentTimeZone();
+        if (timeZone.toLowerCase() == 'utc') {
+            return date.toISOString();
+        }
+        if (timeZone.toLowerCase() == 'local') {
+            return date.toLocaleString();
+        }
+        return date.toLocaleString([], {timeZone: timeZone, timeZoneName: "short"});
     },
     _getDisplaySpeed: function(fps) {
         return fps + 'fps';
@@ -2198,3 +2517,7 @@ L.Map.addInitHook(function() {
 L.control.timeDimension = function(options) {
     return new L.Control.TimeDimension(options);
 };
+    
+    return L.TimeDimension;
+  }, window)
+);

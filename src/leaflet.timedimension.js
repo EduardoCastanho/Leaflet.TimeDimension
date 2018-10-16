@@ -68,7 +68,7 @@ L.TimeDimension = (L.Layer || L.Class).extend({
         }
         this._loadingTimeIndex = newIndex;
         var newTime = this._availableTimes[newIndex];
-        console.log('INIT -- Current time: ' + new Date(newTime).toISOString());
+       // console.log('INIT -- Current time: ' + new Date(newTime).toISOString());
         if (this._checkSyncedLayersReady(this._availableTimes[this._loadingTimeIndex])) {
             this._newTimeIndexLoaded();
         } else {
@@ -78,7 +78,7 @@ L.TimeDimension = (L.Layer || L.Class).extend({
             // add timeout of 3 seconds if layers doesn't response
             setTimeout((function (index) {
                 if (index == this._loadingTimeIndex) {
-                    console.log('Change time for timeout');
+                    // console.log('Change time for timeout');
                     this._newTimeIndexLoaded();
                 }
             }).bind(this, newIndex), this._loadingTimeout);
@@ -91,25 +91,25 @@ L.TimeDimension = (L.Layer || L.Class).extend({
             return;
         }
         var time = this._availableTimes[this._loadingTimeIndex];
-        console.log('END -- Current time: ' + new Date(time).toISOString());
+        // console.log('END -- Current time: ' + new Date(time).toISOString());
         this._currentTimeIndex = this._loadingTimeIndex;
         this.fire('timeload', {
             time: time
         });
         this._loadingTimeIndex = -1;
     },
-    
+
     _checkSyncedLayersReady: function (time) {
         for (var i = 0, len = this._syncedLayers.length; i < len; i++) {
             if (this._syncedLayers[i].isReady) {
                 if (!this._syncedLayers[i].isReady(time)) {
-					return false;                    
+					return false;
                 }
             }
         }
         return true;
     },
-    
+
     setCurrentTime: function (time) {
         var newIndex = this._seekNearestTimeIndex(time);
         this.setCurrentTimeIndex(newIndex);
@@ -328,7 +328,7 @@ L.TimeDimension = (L.Layer || L.Class).extend({
             availableTimes: this._availableTimes,
             currentTime: currentTime
         });
-        console.log('available times changed');
+        // console.log('available times changed');
     },
     getLowerLimit: function () {
         return this._availableTimes[this.getLowerLimitIndex()];

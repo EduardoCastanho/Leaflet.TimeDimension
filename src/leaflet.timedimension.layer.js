@@ -13,20 +13,23 @@ L.TimeDimension.Layer = (L.Layer || L.Class).extend({
         zIndex: 1
     },
 
-    initialize: function(layer, options) {
+    initialize: function (layer, options) {
         L.setOptions(this, options || {});
         this._map = null;
         this._baseLayer = layer;
         this._currentLayer = null;
         this._timeDimension = this.options.timeDimension || null;
+        this._first_datetime = this.options.first_datetime || null;
+        this._period = this.options.period || null;
+        this._keep_until_new=this.options.keep_until_new || false;
     },
 
-    addTo: function(map) {
+    addTo: function (map) {
         map.addLayer(this);
         return this;
     },
 
-    onAdd: function(map) {
+    onAdd: function (map) {
         this._map = map;
         if (!this._timeDimension && map.timeDimension) {
             this._timeDimension = map.timeDimension;
@@ -37,7 +40,7 @@ L.TimeDimension.Layer = (L.Layer || L.Class).extend({
         this._update();
     },
 
-    onRemove: function(map) {
+    onRemove: function (map) {
         this._timeDimension.unregisterSyncedLayer(this);
         this._timeDimension.off("timeloading", this._onNewTimeLoading, this);
         this._timeDimension.off("timeload", this._update, this);
@@ -45,12 +48,12 @@ L.TimeDimension.Layer = (L.Layer || L.Class).extend({
         this._map = null;
     },
 
-    eachLayer: function(method, context) {
+    eachLayer: function (method, context) {
         method.call(context, this._baseLayer);
         return this;
     },
 
-    setZIndex: function(zIndex) {
+    setZIndex: function (zIndex) {
         this.options.zIndex = zIndex;
         if (this._baseLayer.setZIndex) {
             this._baseLayer.setZIndex(zIndex);
@@ -61,7 +64,7 @@ L.TimeDimension.Layer = (L.Layer || L.Class).extend({
         return this;
     },
 
-    setOpacity: function(opacity) {
+    setOpacity: function (opacity) {
         this.options.opacity = opacity;
         if (this._baseLayer.setOpacity) {
             this._baseLayer.setOpacity(opacity);
@@ -72,7 +75,7 @@ L.TimeDimension.Layer = (L.Layer || L.Class).extend({
         return this;
     },
 
-    bringToBack: function() {
+    bringToBack: function () {
         if (!this._currentLayer) {
             return;
         }
@@ -80,7 +83,7 @@ L.TimeDimension.Layer = (L.Layer || L.Class).extend({
         return this;
     },
 
-    bringToFront: function() {
+    bringToFront: function () {
         if (!this._currentLayer) {
             return;
         }
@@ -88,7 +91,7 @@ L.TimeDimension.Layer = (L.Layer || L.Class).extend({
         return this;
     },
 
-    _onNewTimeLoading: function(ev) {
+    _onNewTimeLoading: function (ev) {
         // to be implemented for each type of layer
         this.fire('timeload', {
             time: ev.time
@@ -96,21 +99,36 @@ L.TimeDimension.Layer = (L.Layer || L.Class).extend({
         return;
     },
 
-    isReady: function(time) {
+    isReady: function (time) {
         // to be implemented for each type of layer
         return true;
     },
 
-    _update: function() {
+    _onPeriod: function (time) {
+        if (!this._period || !this._first_datetime) {
+            return true;
+        }
+        diff = moment.duration(moment(time).diff(moment(this._first_datetime))).asSeconds();
+        period = moment.duration(this._period).asSeconds();
+        remaining = diff % period
+        if (remaining === 0){
+            return true
+        }else{
+            return remaining
+        }
+
+    },
+
+    _update: function () {
         // to be implemented for each type of layer
         return true;
     },
 
-    getBaseLayer: function() {
+    getBaseLayer: function () {
         return this._baseLayer;
     },
 
-    getBounds: function() {
+    getBounds: function () {
         var bounds = new L.LatLngBounds();
         if (this._currentLayer) {
             bounds.extend(this._currentLayer.getBounds ? this._currentLayer.getBounds() : this._currentLayer.getLatLng());
@@ -120,6 +138,6 @@ L.TimeDimension.Layer = (L.Layer || L.Class).extend({
 
 });
 
-L.timeDimension.layer = function(layer, options) {
+L.timeDimension.layer = function (layer, options) {
     return new L.TimeDimension.Layer(layer, options);
 };

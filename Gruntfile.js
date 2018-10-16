@@ -87,6 +87,7 @@ module.exports = function(grunt) {
                     'src/leaflet.timedimension.layer.js',
                     'src/leaflet.timedimension.layer.wms.js',
                     'src/leaflet.timedimension.layer.geojson.js',
+                    'src/leaflet.timedimension.layer.imageoverlay.js',
                     'src/leaflet.timedimension.player.js',
                     'src/leaflet.timedimension.control.js'
                 ],
